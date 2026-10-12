@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { MindARThree } from './lib/mindar/mindar-image-three.prod.js';
 import { DATA } from './data.js';
+import { createModels } from './models.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 /* ================= ตั้งค่า ================= */
 const CONFIG = {
@@ -524,315 +526,8 @@ const G = (function () {
   const lerp=(a,b,t)=>a+(b-a)*t;
   const ease=t=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2)};
 
-  /* ---------- kidney geometry ---------- */
-  function kidneyGeo(bumpy){
-    const g=new T.SphereGeometry(1,96,64);const p=g.attributes.position;const v=new T.Vector3();
-    for(let i=0;i<p.count;i++){
-      v.fromBufferAttribute(p,i);let {x,y,z}=v;
-      x*=.62;z*=.44;
-      const k=Math.exp(-(y*y)/(2*.16));const side=Math.max(0,Math.min(1,(-x)/.62));
-      x+= .42*k*Math.pow(side,1.6);
-      x+= .06*(y*y);
-      if(bumpy){const n=Math.sin(x*17)*Math.sin(y*13+1)*Math.sin(z*19+2);const s=1+.045*n;x*=s;y*=s;z*=s}
-      p.setXYZ(i,x,y,z);
-    }
-    g.computeVertexNormals();return g;
-  }
-  const KG={ok:kidneyGeo(false),bad:kidneyGeo(true)};
-  function tube(pts,r,c){return M(new T.TubeGeometry(new T.CatmullRomCurve3(pts.map(a=>new T.Vector3(...a))),48,r,14,false),std(c,{roughness:.4}))}
-  function makeKidney(){
-    const g=new T.Group();
-    const mat=phys(0xB9443A,{roughness:.42,clearcoat:.5});const body=M(KG.ok,mat);g.add(body);
-    g.add(tube([[-.2,.12,0],[-.55,.22,.02],[-.9,.42,0],[-1.2,.5,-.05]],.075,0xC63A3A));
-    g.add(tube([[-.2,-.02,.02],[-.6,.0,.08],[-.95,.12,.05],[-1.22,.18,0]],.08,0x3E6FC7));
-    g.add(tube([[-.22,-.16,0],[-.42,-.4,0],[-.42,-.8,0],[-.36,-1.25,0]],.055,0xE5C27E));
-    const drops=[];for(let i=0;i<7;i++){const d=M(new T.SphereGeometry(.055,14,10),std(0xF2D35B,{emissive:0x6b5200,emissiveIntensity:.4,transparent:true}),false);d.userData.o=i/7;d.visible=false;g.add(d);drops.push(d)}
-    const c0=lin(0xC0473C),c1=lin(0x8C5B51);let bad=0,target=0,dripFast=false;
-    return {group:g,
-      setBad(b){target=b?1:0;body.geometry=b?KG.bad:KG.ok},
-      setFast(f){dripFast=f},
-      update(t,dt){bad=lerp(bad,target,Math.min(1,dt*3));mat.color.copy(c0).lerp(c1,bad);mat.roughness=.42+.4*bad;mat.clearcoat=.5*(1-bad);
-        body.scale.setScalar(1-.12*bad);
-        drops.forEach(d=>{d.visible=bad>.5;const sp=dripFast?.9:.55;const ph=((t*sp)+d.userData.o)%1;d.position.set(-.36,-1.28-ph*.7,0);d.material.opacity=1-ph;d.scale.setScalar(.6+.6*(1-ph))});}};
-  }
-
-  const CON=lin(0x5BE3B5),COFF=lin(0xFFFFFF),GOLD=lin(0xF2B544);
-  /* ---------- models ---------- */
-  const MODELS={
-    drop(){
-      const g=new T.Group();const pts=[];const R=.62,H=1.2;
-      for(let i=0;i<=24;i++){const a=-Math.PI/2+i/24*Math.PI/2;pts.push(new T.Vector2(Math.max(.0001,Math.cos(a)*R),Math.sin(a)*R))}
-      for(let i=1;i<=30;i++){const u=i/30;pts.push(new T.Vector2(Math.max(.0001,R*Math.pow(Math.cos(u*Math.PI/2),1.25)),u*H))}
-      const shell=M(new T.LatheGeometry(pts,72),phys(0xD8343F,{roughness:.12,clearcoat:1,transparent:true,opacity:.6,depthWrite:false}));g.add(shell);
-      const core=M(new T.SphereGeometry(.3,32,24),std(0x9C1B28,{roughness:.6,transparent:true,opacity:.35}),false);g.add(core);
-      const cubes=[];for(let i=0;i<7;i++){const c=M(new T.BoxGeometry(.16,.16,.16),std(0xFFFFFF,{roughness:.35}));const a=i/7*Math.PI*2;c.userData={a,r:.22+.12*(i%2),y:-.15+.12*(i%3)};g.add(c);cubes.push(c)}
-      const top=label('น้ำตาลในเลือดสูง',{color:'#A11F2D'});top.position.set(0,1.55,0);g.add(top);
-      const names=['ตา','ไต','หัวใจ','หลอดเลือด','เส้นประสาท'];
-      const org=names.map(n=>{const l=label(n,{bg:'#FFF1F1',color:'#A11F2D',stroke:'#E06A75',h:.2});l.material.opacity=0;g.add(l);return l});
-      let showOrg=0,orgT=0;
-      const D1=callout('ก้อนน้ำตาล',new T.Vector3(.18,.02,.25),new T.Vector3(1.05,.6,0),{dot:'#FFFFFF'});
-      const D2=callout('เลือด',new T.Vector3(-.38,.3,.15),new T.Vector3(-1.0,.95,0),{dot:'#D8343F'});g.add(D1,D2);
-      g.position.y=-.2;
-      return {group:g,spin:true,baseY:.95,
-        fx(k){if(k==='organs')showOrg=1},
-        update(t,dt){cubes.forEach((c,i)=>{const a=c.userData.a+t*.6;c.position.set(Math.cos(a)*c.userData.r,c.userData.y+Math.sin(t*1.7+i)*.08,Math.sin(a)*c.userData.r);c.rotation.set(t*.8+i,t*.6+i,0)});
-          orgT=lerp(orgT,showOrg,Math.min(1,dt*2));
-          D1.userData.fade(1-orgT);D2.userData.fade(1-orgT);
-          org.forEach((l,i)=>{const a=i/5*Math.PI*2+t*.35;l.position.set(Math.cos(a)*1.25,.25+Math.sin(t+i)*.06,Math.sin(a)*1.25);l.material.opacity=orgT;l.scale.copy(l.userData.base).multiplyScalar(.7+.3*orgT)});}};
-    },
-    plate(){
-      const g=new T.Group();
-      g.add(M(new T.CylinderGeometry(1.12,1.0,.07,72),std(0xFAFAF7,{roughness:.25})));
-      const rimT=M(new T.TorusGeometry(1.09,.045,14,90),std(0xFAFAF7,{roughness:.25}));rimT.rotation.x=Math.PI/2;rimT.position.y=.05;g.add(rimT);
-      function wedge(a0,a1,col){
-        const sh=new T.Shape();sh.moveTo(0,0);sh.absarc(0,0,.93,a0,a1,false);sh.lineTo(0,0);
-        const geo=new T.ExtrudeGeometry(sh,{depth:.08,bevelEnabled:true,bevelSize:.02,bevelThickness:.02,bevelSegments:2,curveSegments:40});
-        geo.rotateX(-Math.PI/2);const m=M(geo,std(col,{roughness:.75}));const mid=(a0+a1)/2;const grp=new T.Group();grp.add(m);
-        grp.position.set(Math.cos(mid)*.035,.05,-Math.sin(mid)*.035);grp.userData.base=grp.position.clone();return grp;
-      }
-      const P={veg:wedge(Math.PI/2,Math.PI*1.5,0x5E9F45),rice:wedge(0,Math.PI/2,0xA77B4F),prot:wedge(-Math.PI/2,0,0xF0DDB4)};
-      Object.values(P).forEach(p=>g.add(p));
-      const rnd=(()=>{let s=7;return()=>{s=(s*9301+49297)%233280;return s/233280}})();
-      for(let i=0;i<13;i++){const a=Math.PI/2+.15+rnd()*(Math.PI-.3),r=.18+rnd()*.65;const b=new T.Group();
-        b.add(M(new T.CylinderGeometry(.025,.035,.1,8),std(0x8DBF5A)));
-        for(let j=0;j<4;j++){const s=M(new T.SphereGeometry(.07+rnd()*.03,12,10),std(0x2F7D32,{roughness:.9}));s.position.set((rnd()-.5)*.09,.09+rnd()*.03,(rnd()-.5)*.09);b.add(s)}
-        b.position.set(Math.cos(a)*r,.13,-Math.sin(a)*r);P.veg.add(b)}
-      const grain=new T.InstancedMesh(new T.SphereGeometry(.035,8,6),std(0xD9B98A,{roughness:.8}),110);const dm=new T.Object3D();
-      for(let i=0;i<110;i++){const a=.12+rnd()*(Math.PI/2-.24),r=.15+rnd()*.7;dm.position.set(Math.cos(a)*r,.14+rnd()*.05,-Math.sin(a)*r);dm.rotation.set(rnd()*3,rnd()*3,rnd()*3);dm.scale.set(1.6,.8,.8);dm.updateMatrix();grain.setMatrixAt(i,dm.matrix)}
-      grain.castShadow=true;P.rice.add(grain);
-      const fish=M(new T.SphereGeometry(.5,32,16),std(0xE9915A,{roughness:.55}));fish.scale.set(.62,.13,.3);fish.position.set(.45,.16,.33);fish.rotation.y=-.6;P.prot.add(fish);
-      for(let i=0;i<3;i++){const tf=M(new T.BoxGeometry(.14,.12,.14),std(0xF6EDCF,{roughness:.7}));tf.position.set(.22+i*.17,.17,.7-i*.06);tf.rotation.y=i*.4;P.prot.add(tf)}
-      const fruit=new T.Group();
-      const guava=M(new T.SphereGeometry(.17,24,18),std(0x9BC45A,{roughness:.6}));guava.position.set(0,.17,0);fruit.add(guava);
-      const ra=[];for(let i=0;i<=12;i++){const u=i/12;ra.push(new T.Vector2(Math.max(.001,.13*Math.sin(u*Math.PI)*(1-.35*u)+.0),u*.3))}
-      const rose=M(new T.LatheGeometry(ra,24),std(0xE2547A,{roughness:.35}));rose.position.set(.3,.0,.05);fruit.add(rose);
-      const pomelo=M(new T.SphereGeometry(.12,20,14),std(0xF2E6A0,{roughness:.6}));pomelo.position.set(.12,.12,.27);fruit.add(pomelo);
-      fruit.position.set(1.25,0,.55);fruit.userData.base=fruit.position.clone();g.add(fruit);P.fruit=fruit;
-      const L={veg:label('ผัก ½ จาน',{color:'#2F6E2B'}),rice:label('ข้าวกล้อง ¼',{color:'#7A5532'}),prot:label('ปลา เต้าหู้ ¼',{color:'#B4541A'}),fruit:label('ผลไม้ไม่หวานจัด',{color:'#B23A5C',h:.2})};
-      L.veg.position.set(-.55,.75,0);L.rice.position.set(.5,.75,-.45);L.prot.position.set(.5,.75,.5);L.fruit.position.set(1.05,.62,.85);
-      Object.values(L).forEach(l=>g.add(l));
-      let hi=null;
-      return {group:g,spin:false,baseY:.35,tilt:.12,
-        fx(k){hi=k},
-        update(t,dt){for(const k of ['veg','rice','prot','fruit']){const on=hi===k||hi==='all';const p=P[k];const ty=p.userData.base.y+(hi===k?.22:0);p.position.y=lerp(p.position.y,ty,Math.min(1,dt*5));
-          const s=hi===k?1.3+.06*Math.sin(t*5):(on?1.1:1);L[k].scale.copy(L[k].userData.base).multiplyScalar(lerp(L[k].scale.x/L[k].userData.base.x,s,Math.min(1,dt*6)))}}};
-    },
-    exercise(){
-      const g=new T.Group();
-      const shirt=std(0x7FB2E0,{roughness:.75}),pants=std(0x34445F,{roughness:.8}),skin=std(0xEDC09A,{roughness:.7}),shoe=std(0x3A3330,{roughness:.55}),hairM=std(0xE2E2E2,{roughness:.9});
-      function limb(len,r,mat){const j=new T.Group();const m=M(new T.CylinderGeometry(r*.86,r,len,18),mat);m.position.y=-len/2;j.add(m);j.add(M(new T.SphereGeometry(r*1.05,16,12),mat));return j}
-      const hips=new T.Group();g.add(hips);
-      const pel=M(new T.SphereGeometry(.2,24,16),pants);pel.scale.set(1.05,.6,.78);hips.add(pel);
-      const spine=new T.Group();spine.position.y=.04;hips.add(spine);
-      const torso=M(new T.CylinderGeometry(.2,.185,.5,24),shirt);torso.position.y=.27;spine.add(torso);
-      const shl=M(new T.SphereGeometry(.2,24,16),shirt);shl.scale.set(1.15,.5,.82);shl.position.y=.5;spine.add(shl);
-      const neck=M(new T.CylinderGeometry(.05,.055,.1,12),skin);neck.position.y=.6;spine.add(neck);
-      const head=new T.Group();head.position.y=.75;spine.add(head);
-      head.add(M(new T.SphereGeometry(.13,28,20),skin));
-      const hair=M(new T.SphereGeometry(.138,28,16,0,Math.PI*2,0,Math.PI*.55),hairM);hair.rotation.x=-.4;hair.position.set(0,.012,-.008);head.add(hair);
-      [-.045,.045].forEach(x=>{const e=M(new T.SphereGeometry(.014,8,6),std(0x222222),false);e.position.set(x,.02,.123);head.add(e);
-        const gl=M(new T.TorusGeometry(.03,.006,6,20),std(0x5A4A3A,{metalness:.3}),false);gl.position.set(x,.02,.128);head.add(gl)});
-      const sm=M(new T.TorusGeometry(.038,.008,6,16,Math.PI),std(0x9B4A3A),false);sm.position.set(0,-.04,.12);sm.rotation.z=Math.PI;head.add(sm);
-      function arm(x){const sh=limb(.3,.062,shirt);sh.position.set(x,.48,0);spine.add(sh);const el=limb(.27,.048,skin);el.position.y=-.3;sh.add(el);const hd=M(new T.SphereGeometry(.056,14,10),skin);hd.position.y=-.29;el.add(hd);return [sh,el]}
-      function leg(x){const th=limb(.42,.088,pants);th.position.set(x,-.06,0);hips.add(th);const kn=limb(.42,.07,pants);kn.position.y=-.42;th.add(kn);const ft=new T.Group();ft.position.y=-.42;kn.add(ft);
-        const f=M(new T.BoxGeometry(.12,.07,.25),shoe);f.position.set(0,-.035,.06);ft.add(f);return [th,kn,ft]}
-      const [lS,lE]=arm(-.25),[rS,rE]=arm(.25),[lT,lK,lF]=leg(-.1),[rT,rK,rF]=leg(.1);
-      const chair=new T.Group();const wood=std(0xA0703F,{roughness:.6});
-      const seat=M(new T.BoxGeometry(.52,.05,.46),wood);seat.position.y=.47;chair.add(seat);
-      [[-.23,-.2],[.23,-.2],[-.23,.2],[.23,.2]].forEach(([x,z])=>{const l=M(new T.CylinderGeometry(.022,.022,.47,8),wood);l.position.set(x,.235,z);chair.add(l)});
-      [[-.23],[.23]].forEach(([x])=>{const l=M(new T.CylinderGeometry(.022,.022,.5,8),wood);l.position.set(x,.72,-.2);chair.add(l)});
-      const back=M(new T.BoxGeometry(.52,.2,.04),wood);back.position.set(0,.88,-.21);chair.add(back);
-      chair.scale.setScalar(.001);g.add(chair);
-      const head1=label('30 นาที / วัน',{h:.3,color:'#1D7262',fs:52});head1.position.set(0,2.25,0);g.add(head1);
-      const sub=label('อย่างน้อย 5 วันต่อสัปดาห์',{h:.2,color:'#17242A'});sub.position.set(0,1.98,0);g.add(sub);
-      const J={lS,lE,rS,rE,lT,lK,lF,rT,rK,rF};
-      const BASE={hy:.97,hz:0,sx:0,sz:0,lSx:0,lSz:-.1,rSx:0,rSz:.1,lEx:-.08,rEx:-.08,lTx:0,rTx:0,lKx:0,rKx:0,lFx:0,rFx:0};
-      const L=(a,b,t)=>a+(b-a)*t, wave=ph=>(1-Math.cos(ph*Math.PI*2))/2;
-      const POSES={
-        stand(ph,c,t){return {sx:.02*Math.sin(t*1.5),lSz:-.12,rSz:.12}},
-        march(ph){const s=Math.sin(ph*Math.PI*2),a=Math.max(0,s),b=Math.max(0,-s);return {lTx:-.95*a,lKx:1.4*a,rTx:-.95*b,rKx:1.4*b,lFx:.25*a,rFx:.25*b,lSx:.5*s,rSx:-.5*s,lEx:-.55,rEx:-.55,hy:.97+.015*(a+b)}},
-        swing(ph){const s=Math.sin(ph*Math.PI*2),bo=(1-Math.cos(ph*Math.PI*4))/2;return {lSx:-.95*s,rSx:-.95*s,lEx:-.15,rEx:-.15,lKx:.32*bo,rKx:.32*bo,lTx:-.16*bo,rTx:-.16*bo,lFx:-.16*bo,rFx:-.16*bo,hy:.97-.035*bo}},
-        raise(ph){const e=wave(ph);return {lSz:-(.1+2.75*e),rSz:.1+2.75*e,lEx:0,rEx:0,sx:-.05*e}},
-        kick(ph,c){const e=Math.min(1,Math.sin(ph*Math.PI)*1.35);const o={hy:.6,hz:-.13,lTx:-1.5,rTx:-1.5,lKx:1.5,rKx:1.5,lSx:-.55,rSx:-.55,lEx:-.8,rEx:-.8,lSz:-.18,rSz:.18,sx:-.05};
-          if(c%2===0){o.lKx=1.5-1.38*e;o.lFx=-.35*e}else{o.rKx=1.5-1.38*e;o.rFx=-.35*e}return o},
-        sitstand(ph){const e=wave(ph);return {hy:L(.6,.97,e),hz:L(-.13,0,e),lTx:L(-1.5,0,e),rTx:L(-1.5,0,e),lKx:L(1.5,0,e),rKx:L(1.5,0,e),sx:.55*Math.sin(Math.PI*e)+.06*(1-e),lSx:-1.25,rSx:-1.25,lEx:-.1,rEx:-.1}},
-        heel(ph){const e=wave(ph);return {hy:.97+.075*e,lFx:.5*e,rFx:.5*e,rSz:.44,rSx:-.25,rEx:-.3,lSz:-.14,lEx:-.1}},
-        stretch(ph,c){const e=wave(ph);return c%2===0?{rSz:.1+2.6*e,sz:.3*e,lSz:-.12-.18*e,rEx:0}:{lSz:-(.1+2.6*e),sz:-.3*e,rSz:.12+.18*e,lEx:0}}
-      };
-      const seated={kick:1,sitstand:1};let pulse=0;
-      return {group:g,spin:false,baseY:0,noBob:true,
-        fx(k){if(k==='days')pulse=2.4},
-        update(t,dt){
-          let ph,c,pose;
-          if(VID.on){pose=VCH[VID.ch].pose;
-            if(VID.mode==='count'){const el=((VID.playing?performance.now():VID.pausedAt)-VID.cStart)/COUNT_MS;ph=Math.min(.999,Math.max(0,el));c=VID.count}
-            else{const per=3.2;ph=VID.playing?(t/per)%1:0;c=Math.floor(t/per)}}
-          else{pose='march';ph=(t/2.2)%1;c=0}
-          const tg=Object.assign({},BASE,POSES[pose](ph,c,t));const k=Math.min(1,dt*12);
-          hips.position.y=L(hips.position.y||.97,tg.hy,k);hips.position.z=L(hips.position.z,tg.hz,k);
-          spine.rotation.x=L(spine.rotation.x,tg.sx,k);spine.rotation.z=L(spine.rotation.z,tg.sz,k);
-          lS.rotation.x=L(lS.rotation.x,tg.lSx,k);lS.rotation.z=L(lS.rotation.z,tg.lSz,k);rS.rotation.x=L(rS.rotation.x,tg.rSx,k);rS.rotation.z=L(rS.rotation.z,tg.rSz,k);
-          lE.rotation.x=L(lE.rotation.x,tg.lEx,k);rE.rotation.x=L(rE.rotation.x,tg.rEx,k);
-          lT.rotation.x=L(lT.rotation.x,tg.lTx,k);rT.rotation.x=L(rT.rotation.x,tg.rTx,k);lK.rotation.x=L(lK.rotation.x,tg.lKx,k);rK.rotation.x=L(rK.rotation.x,tg.rKx,k);
-          lF.rotation.x=L(lF.rotation.x,tg.lFx,k);rF.rotation.x=L(rF.rotation.x,tg.rFx,k);
-          // chair: under the person for seated moves, beside them as a support otherwise
-          const cs=VID.on?1:0;chair.scale.setScalar(Math.max(.001,L(chair.scale.x,cs,Math.min(1,dt*5))));
-          const sit=!!seated[pose];chair.position.x=L(chair.position.x,sit?0:.68,Math.min(1,dt*5));chair.position.z=L(chair.position.z,sit?-.15:0,Math.min(1,dt*5));chair.rotation.y=L(chair.rotation.y,sit?0:Math.PI/2,Math.min(1,dt*5));
-          const lv=VID.on?0:1;[head1,sub].forEach(l=>{l.material.opacity=L(l.material.opacity,lv,Math.min(1,dt*6))});
-          const pz=pulse>0?1.15+.08*Math.sin(t*8):1;head1.scale.copy(head1.userData.base).multiplyScalar(pz);pulse=Math.max(0,pulse-dt);
-        }};
-    },
-    meds(){
-      const g=new T.Group();
-      const clock=new T.Group();clock.position.y=.95;g.add(clock);
-      const face=M(new T.CylinderGeometry(.72,.72,.12,64),std(0xFFFFFF,{roughness:.3}));face.rotation.x=Math.PI/2;clock.add(face);
-      const rimC=M(new T.TorusGeometry(.73,.07,16,80),std(0x1D7262,{roughness:.35,metalness:.1}));clock.add(rimC);
-      for(let i=0;i<12;i++){const a=i/12*Math.PI*2;const tk=M(new T.BoxGeometry(i%3?.03:.05,i%3?.08:.14,.02),std(0x17242A),false);tk.position.set(Math.sin(a)*.58,Math.cos(a)*.58,.07);tk.rotation.z=-a;clock.add(tk)}
-      const hp=new T.Group(),mp=new T.Group();hp.position.z=.08;mp.position.z=.09;
-      const hh=M(new T.BoxGeometry(.06,.36,.02),std(0x17242A),false);hh.position.y=.15;hp.add(hh);
-      const mh=M(new T.BoxGeometry(.04,.5,.02),std(0x17242A),false);mh.position.y=.22;mp.add(mh);
-      clock.add(hp,mp);const dot=M(new T.CylinderGeometry(.05,.05,.04,16),std(0xA53F33),false);dot.rotation.x=Math.PI/2;dot.position.z=.1;clock.add(dot);
-      const stand=M(new T.CylinderGeometry(.25,.35,.18,32),std(0x1D7262,{roughness:.4}));stand.position.y=.09;g.add(stand);
-      const neck=M(new T.CylinderGeometry(.06,.06,.25,12),std(0x1D7262));neck.position.y=.25;g.add(neck);
-      const pill=new T.Group();const pa=std(0xE0614E,{roughness:.25}),pb=std(0xFAF7F0,{roughness:.25});
-      const c1=M(new T.CylinderGeometry(.11,.11,.17,24),pa);c1.position.y=.085;const c2=M(new T.CylinderGeometry(.11,.11,.17,24),pb);c2.position.y=-.085;
-      const s1=M(new T.SphereGeometry(.11,24,12,0,Math.PI*2,0,Math.PI/2),pa);s1.position.y=.17;const s2=M(new T.SphereGeometry(.11,24,12,0,Math.PI*2,Math.PI/2,Math.PI/2),pb);s2.position.y=-.17;
-      pill.add(c1,c2,s1,s2);g.add(pill);
-      const lab=label('ตรงเวลา ตรงขนาด',{h:.24,color:'#1D7262'});lab.position.set(0,1.95,0);g.add(lab);
-      let fast=0,big=0,bigT=0;
-      return {group:g,spin:false,baseY:.05,
-        fx(k){if(k==='clock')fast=2.2;if(k==='pill')big=2.5},
-        update(t,dt){const sp=fast>0?6:.15;mp.rotation.z-=dt*sp;hp.rotation.z-=dt*sp/12;fast=Math.max(0,fast-dt);
-          bigT=lerp(bigT,big>0?1:0,Math.min(1,dt*4));big=Math.max(0,big-dt);
-          const a=t*.8;const r=lerp(1.1,.0,bigT);pill.position.set(Math.cos(a)*r,lerp(.75,1.0,bigT),lerp(Math.sin(a)*r,.75,bigT));
-          pill.rotation.set(t*1.2,0,Math.PI/2.6);pill.scale.setScalar(1+bigT*1.3)}};
-    },
-    mind(){
-      const g=new T.Group();
-      const core=M(new T.SphereGeometry(.5,48,32),std(0x4FD1B0,{emissive:0x1f8d72,emissiveIntensity:.55,roughness:.35}));core.position.y=.9;g.add(core);
-      const halo=new T.Mesh(new T.SphereGeometry(.82,48,32),new T.MeshPhysicalMaterial({color:0xBFF5E5,transparent:true,opacity:.22,roughness:.1,depthWrite:false}));halo.position.y=.9;g.add(halo);
-      const ring=[];for(let i=0;i<28;i++){const d=new T.Mesh(new T.SphereGeometry(.035,10,8),new T.MeshBasicMaterial({color:0xE9FFF6}));d.userData.a=i/28*Math.PI*2;g.add(d);ring.push(d)}
-      const lab=label('หายใจเข้า',{h:.3,color:'#1D7262',fs:50});lab.position.set(0,2.05,0);g.add(lab);let last='';
-      return {group:g,spin:false,baseY:.05,
-        update(t){const ph=(t%8)/8;const s=.72+.28*(.5-.5*Math.cos(ph*Math.PI*2));core.scale.setScalar(s);halo.scale.setScalar(.85+.3*(s-.72)/.28);
-          const txt=ph<.5?'หายใจเข้า… ช้า ๆ':'หายใจออก… ช้า ๆ';if(txt!==last){lab.set(txt);last=txt}
-          ring.forEach((d,i)=>{const a=d.userData.a+t*.25;const r=1.05+.18*s;d.position.set(Math.cos(a)*r,.9+Math.sin(a*3+t)*.06,Math.sin(a)*r)})}};
-    },
-    kidney(){
-      const k=makeKidney();const outer=new T.Group();const g=new T.Group();outer.add(g);g.scale.setScalar(.8);g.position.y=.1;g.add(k.group);k.group.position.set(-.45,.25,0);
-      const lab=label('ไตปกติ',{h:.26,color:'#1D7262',dot:'#2E9B72'});lab.position.set(-.3,1.55,0);g.add(lab);let st=-1;
-      const C1=callout('หลอดเลือดแดง',new T.Vector3(-1.45,.74,0),new T.Vector3(-1.55,1.2,0),{dot:'#C63A3A',h:.26});
-      const C2=callout('หลอดเลือดดำ',new T.Vector3(-1.52,.43,.05),new T.Vector3(-1.6,-.1,0),{dot:'#3E6FC7',h:.26});
-      const C3=callout('ท่อไต',new T.Vector3(-.82,-.7,0),new T.Vector3(-1.35,-.95,0),{dot:'#E5C27E',h:.26});
-      [C1,C2,C3].forEach(c=>g.add(c));
-      // magnifier: what the kidney filter does
-      const bub=new T.Group();bub.position.set(1.3,.55,0);g.add(bub);
-      const glass=new T.Mesh(new T.SphereGeometry(.62,48,32),new T.MeshPhysicalMaterial({color:0xEAF7F3,transparent:true,opacity:.2,roughness:.05,clearcoat:1,depthWrite:false}));bub.add(glass);
-      const rim2=M(new T.TorusGeometry(.62,.035,12,80),std(0xFFFFFF,{roughness:.2,metalness:.2}),false);bub.add(rim2);
-      const sc=document.createElement('canvas');sc.width=sc.height=256;const sx=sc.getContext('2d');const sieveTex=new T.CanvasTexture(sc);sieveTex.encoding=T.sRGBEncoding;
-      function drawSieve(big){sx.fillStyle='#E7A28E';sx.fillRect(0,0,256,256);sx.fillStyle='#7A2E25';for(let y=12;y<256;y+=26)for(let x=12+((y/26)%2)*13;x<256;x+=26){sx.beginPath();sx.arc(x,y,big?9:4,0,Math.PI*2);sx.fill()}sieveTex.needsUpdate=true}
-      drawSieve(false);
-      const sieve=M(new T.CylinderGeometry(.48,.48,.035,48),new T.MeshStandardMaterial({map:sieveTex,roughness:.6}),false);bub.add(sieve);
-      const parts=[];
-      for(let i=0;i<9;i++){const p=M(new T.SphereGeometry(.035,10,8),std(0x8F9A9E),false);p.userData={o:i/9,x:(Math.random()-.5)*.5,z:(Math.random()-.5)*.5,pr:false};bub.add(p);parts.push(p)}
-      for(let i=0;i<4;i++){const p=M(new T.SphereGeometry(.075,16,12),std(0xF2C230,{emissive:0x6b5200,emissiveIntensity:.35}),false);p.userData={o:i/4+.1,x:(Math.random()-.5)*.45,z:(Math.random()-.5)*.45,pr:true};bub.add(p);parts.push(p)}
-      const bl=label('ขยายตัวกรองในไต',{h:.25,fs:42,color:'#1D7262'});bl.position.set(0,.95,0);bub.add(bl);
-      const leg1=label('ของเสีย',{h:.22,fs:40,dot:'#8F9A9E'});leg1.position.set(-.36,-.92,0);bub.add(leg1);const leg2=label('โปรตีน',{h:.22,fs:40,dot:'#F2C230'});leg2.position.set(.4,-.92,0);bub.add(leg2);
-      const lead=callout(' ',new T.Vector3(.15,.5,.25),new T.Vector3(.68,.55,.1),{bg:'none'});g.add(lead);
-      const self={group:outer,spin:false,baseY:.85,
-        sync(){if(st!==S.k){st=S.k;k.setBad(!!S.k);drawSieve(!!S.k);lab.set(S.k?'ไตจากเบาหวาน':'ไตปกติ',{color:S.k?'#A9501A':'#1D7262',dot:S.k?'#A9501A':'#2E9B72'})}},
-        fx(f){k.setFast(f==='drip')},
-        update(t,dt){k.update(t,dt);k.group.rotation.y=Math.sin(t*.5)*.22;
-          parts.forEach(p=>{const u=p.userData;const ph=(t*.32+u.o)%1;let y=.5-ph*1.0;
-            if(u.pr&&!S.k){y=Math.max(y,.08+.05*Math.abs(Math.sin(t*3+u.o*9)))}
-            p.position.set(u.x+Math.sin(t+u.o*7)*.03,y,u.z);p.visible=Math.hypot(u.x,u.z)<.5&&y>-.52})}};
-      self.sync();return self;
-    },
-    egfr(){
-      const k=makeKidney();const g=new T.Group();g.add(k.group);k.group.position.y=.25;k.group.scale.setScalar(.85);
-      const ringM=std(0x2E8B57,{emissive:0x2E8B57,emissiveIntensity:.35});const ring=M(new T.TorusGeometry(1.0,.06,16,90),ringM);ring.rotation.x=Math.PI/2;ring.position.y=-.85;g.add(ring);
-      const badge=label('62',{h:.34,fs:56});badge.position.set(0,1.28,.4);g.add(badge);let lastV=-1;
-      const self={group:g,spin:true,baseY:.85,
-        sync(){if(lastV===S.gfr)return;lastV=S.gfr;const i=stageIdx(S.gfr);k.setBad(S.gfr<45);ringM.color.copy(lin(STAGE_C[i]));ringM.emissive.copy(lin(STAGE_C[i]));
-          badge.set(`eGFR ${S.gfr}  •  ${STAGES[i][3]}`,{color:STAGE_C[i],stroke:STAGE_C[i]})},
-        update(t,dt){k.update(t,dt);ring.rotation.z=t*.4}};
-      self.sync();return self;
-    },
-    care(){
-      const k=makeKidney();const g=new T.Group();g.add(k.group);k.group.scale.setScalar(.62);k.group.position.y=.2;
-      const orbs=[];const pickables=[];
-      for(let i=0;i<10;i++){const o=new T.Group();const sp=M(new T.SphereGeometry(.15,24,18),std(0xFFFFFF,{roughness:.3}));sp.userData.pick=['care',i];o.add(sp);pickables.push(sp);
-        const n=label(String(i+1),{h:.2,bg:'none',color:'#17242A',fs:54});n.position.z=0;o.add(n);o.userData={sp,n};g.add(o);orbs.push(o)}
-      const title=label(' ',{h:.22,maxW:560,color:'#1D7262'});title.position.set(0,1.55,0);g.add(title);let last=-1;
-      const self={group:g,spin:false,baseY:.85,pickables,
-        sync(){if(last!==S.care){last=S.care;title.set(`${S.care+1}. ${CARE[S.care][0]}`)}},
-        update(t,dt){k.update(t,dt);orbs.forEach((o,i)=>{const a=i/10*Math.PI*2+t*.18;o.position.set(Math.cos(a)*1.3,.2+Math.sin(a*2+t)*.08,Math.sin(a)*1.3);
-          const on=i===S.care;o.userData.sp.material.color.copy(on?CON:COFF);const s=lerp(o.scale.x,on?1.6:1,Math.min(1,dt*6));o.scale.setScalar(s)})}};
-      self.sync();return self;
-    },
-    routine(){
-      const g=new T.Group();const board=new T.Group();g.add(board);
-      board.add(M(new T.BoxGeometry(1.6,2.0,.08),std(0xB98B5C,{roughness:.6})));
-      const paperM=M(new T.BoxGeometry(1.42,1.78,.02),std(0xFFFFFF,{roughness:.9}));paperM.position.z=.05;board.add(paperM);
-      const clip=M(new T.BoxGeometry(.6,.2,.1),std(0x6C7A80,{metalness:.6,roughness:.3}));clip.position.set(0,.98,.07);board.add(clip);
-      const short=['คุมน้ำตาล/ความดัน','กินอาหารเหมาะสม','ออกกำลังกาย','ใช้ยาปลอดภัย','ติดตามค่าไต','จัดการความเครียด'];
-      const rows=[];const pickables=[];
-      short.forEach((s,i)=>{const y=.62-i*.25;const box=M(new T.BoxGeometry(.17,.17,.04),std(0xFFFFFF,{roughness:.5}));box.position.set(-.5,y,.08);board.add(box);
-        const edge=M(new T.BoxGeometry(.19,.19,.02),std(0x1D7262),false);edge.position.set(-.5,y,.065);board.add(edge);
-        const tick=new T.Group();const t1=M(new T.BoxGeometry(.05,.11,.03),std(0x1D7262),false);t1.position.set(-.03,-.01,0);t1.rotation.z=.75;const t2=M(new T.BoxGeometry(.05,.2,.03),std(0x1D7262),false);t2.position.set(.04,.03,0);t2.rotation.z=-.6;tick.add(t1,t2);tick.position.set(-.5,y,.12);board.add(tick);
-        const l=label(s,{h:.19,bg:'none',color:'#17242A',fs:44});l.position.set(.12,y,.1);board.add(l);
-        const hit=new T.Mesh(new T.BoxGeometry(1.3,.22,.1),new T.MeshBasicMaterial({visible:false}));hit.position.set(0,y,.1);hit.userData.pick=['rt',i];board.add(hit);pickables.push(hit);
-        const hl=new T.Mesh(new T.BoxGeometry(1.34,.22,.01),new T.MeshBasicMaterial({color:0xF2B544,transparent:true,opacity:0}));hl.position.set(0,y,.065);board.add(hl);
-        rows.push({tick,hl,l})});
-      board.position.y=1.0;board.rotation.x=-.2;
-      return {group:g,spin:false,baseY:0,pickables,
-        update(t,dt){rows.forEach((r,i)=>{const on=i<=S.rt;r.tick.scale.setScalar(lerp(r.tick.scale.x||.001,on?1:.001,Math.min(1,dt*8)));r.hl.material.opacity=lerp(r.hl.material.opacity,i===S.rt?.55:0,Math.min(1,dt*6))})}};
-    },
-    wheel(){
-      const g=new T.Group();const W=[0x1D7262,0x2E8F78,0x3FA58C,0x56B79E,0x74C6AF,0x93D3C1];const segs=[];const pickables=[];
-      for(let i=0;i<6;i++){
-        const a0=Math.PI/2-i*Math.PI/3-.02,a1=a0-Math.PI/3+.04;const sh=new T.Shape();
-        sh.absarc(0,0,1.2,a0,a1,true);sh.absarc(0,0,.46,a1,a0,false);
-        const geo=new T.ExtrudeGeometry(sh,{depth:.16,bevelEnabled:true,bevelSize:.02,bevelThickness:.02,bevelSegments:2,curveSegments:32});geo.rotateX(-Math.PI/2);
-        const m=M(geo,std(W[i],{roughness:.45}));m.userData.pick=['step',i];pickables.push(m);
-        const grp=new T.Group();grp.add(m);const mid=(a0+a1)/2;grp.userData={dir:new T.Vector3(Math.cos(mid),0,-Math.sin(mid)),col:W[i],linC:lin(W[i]),m};
-        const l=label(`${i+1} ${STEPW[i]}`,{h:.25,color:'#17242A'});l.position.set(Math.cos(mid)*.84,.42,-Math.sin(mid)*.84);grp.add(l);
-        g.add(grp);segs.push(grp)}
-      const hub=M(new T.CylinderGeometry(.4,.4,.24,48),std(0xFFFFFF,{roughness:.3}));hub.position.y=.1;g.add(hub);
-      const c=label('6 ทำ จำง่าย',{h:.2,color:'#1D7262'});c.position.set(0,.52,0);g.add(c);
-      const lab=label(' ',{h:.22,color:'#1D7262',maxW:560});lab.position.set(0,1.0,-1.1);g.add(lab);let last=-1;
-      const self={group:g,spin:false,baseY:.3,tilt:.42,pickables,
-        sync(){if(last!==S.step){last=S.step;lab.set(`ขั้นตอนที่ ${S.step+1}: ${STEPS[S.step][0]}`)}},
-        update(t,dt){segs.forEach((s,i)=>{const on=i===S.step;const tgt=on?.16:0;s.position.y=lerp(s.position.y,tgt,Math.min(1,dt*6));s.position.x=lerp(s.position.x,on?s.userData.dir.x*.12:0,Math.min(1,dt*6));s.position.z=lerp(s.position.z,on?s.userData.dir.z*.12:0,Math.min(1,dt*6));
-          s.userData.m.material.color.copy(on?GOLD:s.userData.linC)});g.rotation.y=Math.sin(t*.3)*.08}};
-      self.sync();return self;
-    },
-    family(){
-      const g=new T.Group();
-      const base=M(new T.CylinderGeometry(1.5,1.55,.08,64),std(0xE9EFEC,{roughness:.6}));base.position.y=.04;g.add(base);
-      function person(x,h,col,hair,grey){
-        const p=new T.Group();const prof=[];for(let i=0;i<=20;i++){const u=i/20;const top=Math.max(0,(u-.8)/.2);prof.push(new T.Vector2(Math.max(.001,.27*(1-.3*u)*Math.sqrt(Math.max(0,1-top*top))),u*h))}
-        const body=M(new T.LatheGeometry(prof,32),std(col,{roughness:.6}));body.position.y=.08;p.add(body);
-        const head=M(new T.SphereGeometry(.19,32,24),std(0xEDC09A,{roughness:.7}));head.position.y=h+.26;p.add(head);
-        const hr=M(new T.SphereGeometry(.2,32,16,0,Math.PI*2,0,Math.PI*.55),std(grey?0xD5D5D5:hair,{roughness:.9}));hr.position.y=h+.28;hr.rotation.x=-.25;p.add(hr);
-        p.position.x=x;g.add(p);return p}
-      const d=person(-.72,.95,0xE8A34A,0x2B2220);const e=person(0,.8,0x3E7FB6,0,true);const c=person(.68,.62,0x5FA444,0x2B2220);
-      const cane=M(new T.CylinderGeometry(.025,.025,.95,10),std(0x8A6E54));cane.position.set(.3,.55,.15);cane.rotation.z=-.12;g.add(cane);
-      const hs=new T.Shape();hs.moveTo(0,-.35);hs.bezierCurveTo(-.05,-.25,-.42,-.05,-.42,.15);hs.bezierCurveTo(-.42,.38,-.12,.42,0,.22);hs.bezierCurveTo(.12,.42,.42,.38,.42,.15);hs.bezierCurveTo(.42,-.05,.05,-.25,0,-.35);
-      const hg=new T.ExtrudeGeometry(hs,{depth:.16,bevelEnabled:true,bevelSize:.04,bevelThickness:.04,bevelSegments:3,curveSegments:24});hg.center();
-      const hm=phys(0xE0414E,{roughness:.25,clearcoat:1});const heart=M(hg,hm);heart.position.y=2.05;g.add(heart);
-      const lab=label(' ',{h:.22});lab.position.set(0,2.62,0);g.add(lab);let last='';
-      const cGood=lin(0xE0414E),cBad=lin(0x7B8794);let k=0;
-      const self={group:g,spin:false,baseY:.05,
-        sync(){const v=S.talk;if(v!==last){last=v;lab.set(v==='bad'?'พูดแบบตำหนิ':'พูดแบบให้กำลังใจ',{color:v==='bad'?'#A9501A':'#1D7262',stroke:v==='bad'?'#E3A07A':'#8ED1BE'})}},
-        update(t,dt){k=lerp(k,S.talk==='bad'?1:0,Math.min(1,dt*3));hm.color.copy(cGood).lerp(cBad,k);
-          const beat=1+(1-k)*.08*Math.max(0,Math.sin(t*6));heart.scale.setScalar((1-.3*k)*beat);heart.rotation.y=t*.8;
-          e.rotation.z=Math.sin(t*1.3)*.03*(1-k);e.position.y=-.05*k;d.rotation.y=Math.sin(t)*.15;c.position.y=Math.abs(Math.sin(t*3))*.06*(1-k)}};
-      self.sync();return self;
-    }
-  };
-
-
+  /* ---------- models (see models.js) ---------- */
+  const MODELS = createModels({ T, label, callout, lin, lerp, ease, S, VID, CARE, ROUTINE, STEPS, STAGES, STAGE_C, STEPW, stageIdx, RBox: RoundedBoxGeometry, getVCH: () => VCH, COUNT_MS });
 
   /* ---------- model switching ---------- */
   linAll(holder);
@@ -923,9 +618,12 @@ const G = (function () {
     fScale = fScale ? lerp(fScale, tScale, Math.min(1, dt * 5)) : tScale; fY = lerp(fY, yPx / H * vh - (VID.on ? .28 : .2) * fScale, Math.min(1, dt * 5));
     f.position.set(0, fY, -d); f.scale.setScalar(fScale);
   }
+  let lastR = 0;
   function tick() {
-    const dt = Math.min(.05, clock.getDelta()), t = clock.getElapsedTime();
     if (!camOn && !previewOn) { return }
+    // with the camera on, draw 3D at most 30 times a second (the camera itself runs at ~30 fps); the rest goes to tracking
+    const now = performance.now(); if (camOn && now - lastR < 31) return; lastR = now;
+    const dt = Math.min(.05, clock.getDelta()), t = clock.getElapsedTime();
     if (VID.on && place.where === 'anchor') attach('float');
     if (!VID.on && place.where === 'float' && camOn && place.idx >= 0 && anchors[place.idx].visible) attach('anchor');
     placeFloat(dt);
@@ -948,8 +646,14 @@ const G = (function () {
       const rise = popT < 1 ? (1 - ease(Math.max(0, popT))) * -.6 : 0; root.position.y = model.baseY + (model.noBob ? 0 : Math.sin(t * 1.5) * .05) + rise;
       model.update(t, dt); if (outModel && outModel.update) outModel.update(t, dt);
     }
-    renderer.render(scene, activeCam());
+    perf.n++; perf.t += dt;
+    if (perf.t > 2) { const fps = perf.n / perf.t; perf.n = 0; perf.t = 0;
+      if (fps < 26 && perf.pr > 1) { perf.pr = Math.max(1, perf.pr - .25); renderer.setPixelRatio(perf.pr); renderer.setSize(container.clientWidth, container.clientHeight, !camOn) }
+      else if (fps > 50 && perf.pr < perf.max) { perf.pr = Math.min(perf.max, perf.pr + .25); renderer.setPixelRatio(perf.pr); renderer.setSize(container.clientWidth, container.clientHeight, !camOn) } }
+    renderer.render(scene, activeCam());   // after any resize, so a resized canvas is never shown empty
   }
+  const perf = { n: 0, t: 0, max: Math.min(window.devicePixelRatio || 1, 2), pr: Math.min(window.devicePixelRatio || 1, 2) };
+  out.renderer = renderer;
   renderer.setAnimationLoop(tick);
   return out;
 })();
